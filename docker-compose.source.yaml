@@ -22,6 +22,7 @@ services:
     volumes:
       - ./runtime/native-config:/etc/openresty/generated
       - ./runtime/openresty-east-1/log:/var/log/nginx
+      - ./secrets/node-agent/openresty-east-1:/etc/orp-node-agent:ro
     restart: unless-stopped
 
   openresty-east-2:
@@ -44,6 +45,7 @@ services:
     volumes:
       - ./runtime/native-config-east-2:/etc/openresty/generated
       - ./runtime/openresty-east-2/log:/var/log/nginx
+      - ./secrets/node-agent/openresty-east-2:/etc/orp-node-agent:ro
     restart: unless-stopped
 
   openresty-east-3:
@@ -66,6 +68,7 @@ services:
     volumes:
       - ./runtime/native-config-east-3:/etc/openresty/generated
       - ./runtime/openresty-east-3/log:/var/log/nginx
+      - ./secrets/node-agent/openresty-east-3:/etc/orp-node-agent:ro
     restart: unless-stopped
 
   filebeat-east-1:
@@ -111,4 +114,15 @@ services:
     volumes:
       - ./runtime/openresty-east-3/log:/var/log/nginx:ro
     depends_on: [openresty-east-3]
+    restart: unless-stopped
+
+  demo-traffic-generator:
+    profiles: [traffic]
+    image: openresty-plus-demo-traffic:source
+    build: ./deploy/traffic-generator
+    network_mode: host
+    depends_on: [openresty-east-1, openresty-east-2, openresty-east-3]
+    environment:
+      TRAFFIC_REQUEST_INTERVAL_SECONDS: ${TRAFFIC_REQUEST_INTERVAL_SECONDS:-0.5}
+      TRAFFIC_REQUEST_TIMEOUT_SECONDS: ${TRAFFIC_REQUEST_TIMEOUT_SECONDS:-3}
     restart: unless-stopped

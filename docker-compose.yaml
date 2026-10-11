@@ -3,6 +3,7 @@ name: openresty-plus
 services:
   openresty-plus:
     image: ${OPENRESTY_PLUS_IMAGE:?请在 .env 中填写 OPENRESTY_PLUS_IMAGE}:${IMAGE_TAG:-latest}
+    command: ["run"]
     network_mode: host
     environment:
       OPENRESTY_HTTP_ADDR: ${OPENRESTY_HTTP_ADDR:-:8081}
@@ -18,8 +19,15 @@ services:
       OPENRESTY_KAFKA_BOOTSTRAP_SERVERS: ${OPENRESTY_KAFKA_BOOTSTRAP_SERVERS:?请在 .env 中填写 OPENRESTY_KAFKA_BOOTSTRAP_SERVERS}
       OPENRESTY_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC:?请在 .env 中填写 OPENRESTY_KAFKA_TOPIC}
       OPENRESTY_KAFKA_CONSUMER_GROUP: ${OPENRESTY_KAFKA_CONSUMER_GROUP:-openresty-plus-control-plane-v1}
+      OPENRESTY_AGENT_HTTPS_ADDR: ${OPENRESTY_AGENT_HTTPS_ADDR:-}
+      OPENRESTY_AGENT_TLS_CERT_FILE: ${OPENRESTY_AGENT_TLS_CERT_FILE_CONTAINER:-}
+      OPENRESTY_AGENT_TLS_KEY_FILE: ${OPENRESTY_AGENT_TLS_KEY_FILE_CONTAINER:-}
+      OPENRESTY_AGENT_CLIENT_CA_FILE: ${OPENRESTY_AGENT_CLIENT_CA_FILE_CONTAINER:-}
     volumes:
       - ./runtime:/workspace/runtime
+      - ./secrets/node-agent/pki/server.crt:/run/orp-node-agent/server.crt:ro
+      - ./secrets/node-agent/pki/server.key:/run/orp-node-agent/server.key:ro
+      - ./secrets/node-agent/pki/ca.crt:/run/orp-node-agent/ca.crt:ro
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
@@ -41,6 +49,7 @@ services:
     volumes:
       - ./runtime/native-config:/etc/openresty/generated
       - ./runtime/openresty-east-1/log:/var/log/nginx
+      - ./secrets/node-agent/openresty-east-1:/etc/orp-node-agent:ro
     restart: unless-stopped
 
   openresty-east-2:
@@ -60,6 +69,7 @@ services:
     volumes:
       - ./runtime/native-config-east-2:/etc/openresty/generated
       - ./runtime/openresty-east-2/log:/var/log/nginx
+      - ./secrets/node-agent/openresty-east-2:/etc/orp-node-agent:ro
     restart: unless-stopped
 
   openresty-east-3:
@@ -79,6 +89,7 @@ services:
     volumes:
       - ./runtime/native-config-east-3:/etc/openresty/generated
       - ./runtime/openresty-east-3/log:/var/log/nginx
+      - ./secrets/node-agent/openresty-east-3:/etc/orp-node-agent:ro
     restart: unless-stopped
 
   filebeat-east-1:
@@ -121,6 +132,17 @@ services:
     volumes:
       - ./runtime/openresty-east-3/log:/var/log/nginx:ro
     depends_on: [openresty-east-3]
+    restart: unless-stopped
+
+  demo-traffic-generator:
+    profiles: [traffic]
+    image: openresty-plus-demo-traffic:local
+    build: ./deploy/traffic-generator
+    network_mode: host
+    depends_on: [openresty-east-1, openresty-east-2, openresty-east-3]
+    environment:
+      TRAFFIC_REQUEST_INTERVAL_SECONDS: ${TRAFFIC_REQUEST_INTERVAL_SECONDS:-0.5}
+      TRAFFIC_REQUEST_TIMEOUT_SECONDS: ${TRAFFIC_REQUEST_TIMEOUT_SECONDS:-3}
     restart: unless-stopped
 
   importer:

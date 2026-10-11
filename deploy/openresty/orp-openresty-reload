@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  echo "arguments are not accepted" >&2
+  exit 2
+fi
+
+nginx=/usr/local/openresty/nginx/sbin/openresty
+config=/etc/openresty/generated/active/nginx.conf
+export LD_LIBRARY_PATH=/usr/local/openresty/luajit/lib
+"$nginx" -t -c "$config"
+exec "$nginx" -s reload -c "$config"

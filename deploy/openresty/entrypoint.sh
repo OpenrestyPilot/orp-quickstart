@@ -34,6 +34,39 @@ set -- -c "$release_root/active/nginx.conf" "$@"
 /usr/local/openresty/nginx/sbin/openresty "$@" &
 nginx_pid=$!
 
+# The node Agent is enabled only when Quickstart mounts its per-node identity.
+# Private key material is copied from the read-only mount into a private tmpfs
+# directory and is readable only by the dedicated unprivileged account.
+agent_pid=
+if [ -f /etc/orp-node-agent/config.json ]; then
+  install -d -o orp-agent -g orp-agent -m 0700 /run/orp-node-agent/pki /var/lib/orp-node-agent
+  cp /etc/orp-node-agent/config.json /run/orp-node-agent/config.json
+  cp /etc/orp-node-agent/pki/* /run/orp-node-agent/pki/
+  chown -R orp-agent:orp-agent /run/orp-node-agent /var/lib/orp-node-agent
+  chmod 0600 /run/orp-node-agent/pki/*.key
+  chmod 0644 /run/orp-node-agent/config.json /run/orp-node-agent/pki/*.crt
+  supervise_agent() {
+    child=
+    stop_agent() {
+      [ -n "$child" ] && kill -TERM "$child" 2>/dev/null || true
+      [ -n "$child" ] && wait "$child" 2>/dev/null || true
+      exit 0
+    }
+    trap stop_agent INT TERM
+    while :; do
+      su-exec orp-agent /usr/local/bin/orp-node-agent -config /run/orp-node-agent/config.json &
+      child=$!
+      wait "$child" || true
+      kill -0 "$nginx_pid" 2>/dev/null || return 0
+      echo "orp-node-agent exited; restarting it" >&2
+      sleep 2
+    done
+  }
+  supervise_agent &
+  agent_pid=$!
+  echo "Started orp-node-agent for ${node_name:-unnamed node}" >&2
+fi
+
 for _ in $(seq 1 50); do
   [ -S "$control_socket" ] && break
   sleep 0.1
@@ -76,12 +109,13 @@ register_self &
 registration_pid=$!
 
 terminate() {
-  kill -TERM "$registration_pid" "$socat_pid" "$nginx_pid" 2>/dev/null || true
+  kill -TERM "$registration_pid" "$socat_pid" "$nginx_pid" ${agent_pid:+"$agent_pid"} 2>/dev/null || true
 }
 trap terminate INT TERM
 
 wait "$nginx_pid"
 status=$?
+if [ -n "$agent_pid" ]; then kill "$agent_pid" 2>/dev/null || true; wait "$agent_pid" 2>/dev/null || true; fi
 kill "$registration_pid" 2>/dev/null || true
 kill "$socat_pid" 2>/dev/null || true
 wait "$socat_pid" 2>/dev/null || true

@@ -10,14 +10,20 @@ compose=(docker compose --env-file "$env_file" -f "$root/docker-compose.yaml" --
 quickstart_load_env "$env_file"
 
 with_demos=${QUICKSTART_START_DEMOS:-false}
+with_traffic=${QUICKSTART_START_TRAFFIC_GENERATOR:-false}
 while (($#)); do
   case "$1" in
     --with-demos) with_demos=true ;;
     --without-demos) with_demos=false ;;
-    *) quickstart_fail "不支持的参数：$1（可用 --with-demos、--without-demos）" ;;
+    --with-traffic) with_traffic=true ;;
+    --without-traffic) with_traffic=false ;;
+    *) quickstart_fail "不支持的参数：$1（可用 --with-demos、--without-demos、--with-traffic、--without-traffic）" ;;
   esac
   shift
 done
+
+# The generator targets the three demo nodes, so enabling it also enables them.
+[[ "$with_traffic" == true ]] && with_demos=true
 
 [[ -n "${ADMIN_USERNAME:-}" ]] || quickstart_fail '.env 未配置 ADMIN_USERNAME。'
 [[ -n "${ADMIN_PASSWORD:-}" ]] || quickstart_fail '.env 未配置 ADMIN_PASSWORD。'
@@ -27,11 +33,26 @@ quickstart_check_dependencies
 quickstart_configure_filebeat_brokers
 
 if [[ "$with_demos" == true ]]; then
-  printf '启动管理平台、三个 OpenResty 演示节点和 Filebeat……\n'
-  "${compose[@]}" --profile demos up -d
+  "$root/scripts/deploy/prepare-node-agent.sh"
+  quickstart_load_env "$env_file"
+  printf '构建包含 orp-node-agent 的演示节点镜像……\n'
+  docker build --pull -t "${RUNTIME_IMAGE}:${IMAGE_TAG:-latest}" \
+    -f "$root/deploy/openresty/Dockerfile.control-api" "$root/deploy/openresty"
+  printf '启动管理平台……\n'
+  "${compose[@]}" up -d openresty-plus
+  "$root/scripts/deploy/quickstart-demo.sh"
+  printf '启动三个 OpenResty 演示节点和 Filebeat……\n'
+  if [[ "$with_traffic" == true ]]; then
+    printf '启动演示请求生成器……\n'
+    "${compose[@]}" --profile demos --profile traffic up -d
+  else
+    "${compose[@]}" --profile demos up -d
+    "${compose[@]}" --profile traffic stop demo-traffic-generator >/dev/null 2>&1 || true
+  fi
 else
   printf '启动管理平台（演示节点和 Filebeat 已关闭）……\n'
   "${compose[@]}" up -d openresty-plus
+  "${compose[@]}" --profile traffic stop demo-traffic-generator >/dev/null 2>&1 || true
 fi
 
 printf '管理界面和 API：http://127.0.0.1:8081\n'

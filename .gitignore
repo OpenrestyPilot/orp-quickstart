@@ -6,3 +6,5 @@ orp-backend/
 orp-frontend/
 orp-node-agent/
 orp-nginx-importer/
+deploy/openresty/orp-node-agent/
+/secrets/
