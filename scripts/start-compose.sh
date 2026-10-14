@@ -24,13 +24,14 @@ done
 
 # The generator targets the three demo nodes, so enabling it also enables them.
 [[ "$with_traffic" == true ]] && with_demos=true
+[[ "$with_traffic" != true ]] || quickstart_check_demo_backend_ports
 
-[[ -n "${ADMIN_USERNAME:-}" ]] || quickstart_fail '.env 未配置 ADMIN_USERNAME。'
-[[ -n "${ADMIN_PASSWORD:-}" ]] || quickstart_fail '.env 未配置 ADMIN_PASSWORD。'
-[[ "${DATA_KEY:-}" =~ ^[[:xdigit:]]{64}$ ]] || quickstart_fail 'DATA_KEY 必须是 64 位十六进制字符串。'
-[[ -n "${OPENRESTY_PLUS_IMAGE:-}" ]] || quickstart_fail '.env 未配置 OPENRESTY_PLUS_IMAGE。'
+[[ -n "${ORP_ADMIN_USERNAME:-}" ]] || quickstart_fail '.env 未配置 ORP_ADMIN_USERNAME。'
+[[ -n "${ORP_ADMIN_PASSWORD:-}" ]] || quickstart_fail '.env 未配置 ORP_ADMIN_PASSWORD。'
+[[ "${ORP_DATA_KEY:-}" =~ ^[[:xdigit:]]{64}$ ]] || quickstart_fail 'ORP_DATA_KEY 必须是 64 位十六进制字符串。'
+[[ -n "${ORP_IMAGE:-}" ]] || quickstart_fail '.env 未配置 ORP_IMAGE。'
 quickstart_check_dependencies
-quickstart_configure_filebeat_brokers
+quickstart_configure_filebeat_brokers "$root"
 
 if [[ "$with_demos" == true ]]; then
   "$root/scripts/deploy/prepare-node-agent.sh"
@@ -39,20 +40,49 @@ if [[ "$with_demos" == true ]]; then
   docker build --pull -t "${RUNTIME_IMAGE}:${IMAGE_TAG:-latest}" \
     -f "$root/deploy/openresty/Dockerfile.control-api" "$root/deploy/openresty"
   printf '启动管理平台……\n'
-  "${compose[@]}" up -d openresty-plus
+  "${compose[@]}" up -d orp
   "$root/scripts/deploy/quickstart-demo.sh"
+  quickstart_load_demo_identity "$env_file"
+  quickstart_sync_demo_bootstrap_configs "$root"
   printf '启动三个 OpenResty 演示节点和 Filebeat……\n'
+  compose_profiles=(--profile demos)
+  compose_services=(openresty-east-1 openresty-east-2 openresty-east-3 filebeat-east-1 filebeat-east-2 filebeat-east-3)
+  compose_refresh=()
+  [[ "$QUICKSTART_DEMO_BOOTSTRAP_UPDATED" != true ]] || compose_refresh+=(--force-recreate)
   if [[ "$with_traffic" == true ]]; then
     printf '启动演示请求生成器……\n'
-    "${compose[@]}" --profile demos --profile traffic up -d
+    compose_profiles+=(--profile traffic)
+    compose_services+=(demo-traffic-generator)
+    if [[ "$QUICKSTART_DEMO_BOOTSTRAP_UPDATED" == true ]]; then
+      "${compose[@]}" "${compose_profiles[@]}" up -d --force-recreate "${compose_services[@]}"
+    else
+      "${compose[@]}" "${compose_profiles[@]}" up -d "${compose_services[@]}"
+    fi
   else
-    "${compose[@]}" --profile demos up -d
+    if [[ "$QUICKSTART_DEMO_BOOTSTRAP_UPDATED" == true ]]; then
+      "${compose[@]}" "${compose_profiles[@]}" up -d --force-recreate "${compose_services[@]}"
+    else
+      "${compose[@]}" "${compose_profiles[@]}" up -d "${compose_services[@]}"
+    fi
     "${compose[@]}" --profile traffic stop demo-traffic-generator >/dev/null 2>&1 || true
   fi
 else
   printf '启动管理平台（演示节点和 Filebeat 已关闭）……\n'
-  "${compose[@]}" up -d openresty-plus
+  "${compose[@]}" up -d orp
   "${compose[@]}" --profile traffic stop demo-traffic-generator >/dev/null 2>&1 || true
+fi
+
+if [[ "$with_demos" == true ]]; then
+  # Filebeat may create a new Kafka topic only after its first log event. Refresh
+  # the consumer after the producers have started so a fresh topic is assigned.
+  sleep 3
+  printf '刷新 Kafka 日志订阅并等待管理平台就绪……\n'
+  "${compose[@]}" restart orp
+  for _ in {1..60}; do
+    if nc -z 127.0.0.1 8081 >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  nc -z 127.0.0.1 8081 >/dev/null 2>&1 || quickstart_fail '管理平台重启后未能监听 8081 端口。'
 fi
 
 printf '管理界面和 API：http://127.0.0.1:8081\n'

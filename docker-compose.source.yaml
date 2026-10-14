@@ -1,10 +1,10 @@
-name: openresty-plus
+name: orp
 
 services:
   openresty-east-1:
     profiles: [demos]
-    container_name: openresty-plus-openresty-east-1
-    image: openresty-plus-runtime:source
+    container_name: orp-openresty-east-1
+    image: orp-runtime:source
     build:
       context: ./deploy/openresty
       dockerfile: Dockerfile.control-api
@@ -12,6 +12,7 @@ services:
     hostname: openresty-east-1
     environment:
       RUNTIME_CONTROL_PLANE_URL: http://127.0.0.1:8081
+      RUNTIME_CENTER_ID: ${QUICKSTART_RUNTIME_CENTER_ID:-}
       RUNTIME_HTTP_PORT: 18080
       CONTROL_API_BRIDGE_PORT: 18081
       NODE_REGISTRATION_ENABLED: "false"
@@ -27,14 +28,16 @@ services:
 
   openresty-east-2:
     profiles: [demos]
-    container_name: openresty-plus-openresty-east-2
-    image: openresty-plus-runtime:source
+    container_name: orp-openresty-east-2
+    image: orp-runtime:source
     build:
       context: ./deploy/openresty
       dockerfile: Dockerfile.control-api
     network_mode: host
     hostname: openresty-east-2
     environment:
+      RUNTIME_CONTROL_PLANE_URL: http://127.0.0.1:8081
+      RUNTIME_CENTER_ID: ${QUICKSTART_RUNTIME_CENTER_ID:-}
       RUNTIME_HTTP_PORT: 18180
       CONTROL_API_BRIDGE_PORT: 18181
       NODE_REGISTRATION_ENABLED: "false"
@@ -50,14 +53,16 @@ services:
 
   openresty-east-3:
     profiles: [demos]
-    container_name: openresty-plus-openresty-east-3
-    image: openresty-plus-runtime:source
+    container_name: orp-openresty-east-3
+    image: orp-runtime:source
     build:
       context: ./deploy/openresty
       dockerfile: Dockerfile.control-api
     network_mode: host
     hostname: openresty-east-3
     environment:
+      RUNTIME_CONTROL_PLANE_URL: http://127.0.0.1:8081
+      RUNTIME_CENTER_ID: ${QUICKSTART_RUNTIME_CENTER_ID:-}
       RUNTIME_HTTP_PORT: 18280
       CONTROL_API_BRIDGE_PORT: 18281
       NODE_REGISTRATION_ENABLED: "false"
@@ -73,56 +78,66 @@ services:
 
   filebeat-east-1:
     profiles: [demos]
-    image: openresty-plus-filebeat:source
+    container_name: orp-filebeat-east-1
+    image: orp-filebeat:source
     build: ./deploy/filebeat
     network_mode: host
     environment:
       FILEBEAT_NODE_ID: ${FILEBEAT_EAST_1_NODE_ID:-}
       FILEBEAT_NODE_NAME: openresty-east-1
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
-      FILEBEAT_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC:?请在 .env 中填写 OPENRESTY_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC:?请在 .env 中填写 ORP_KAFKA_TOPIC}
     volumes:
       - ./runtime/openresty-east-1/log:/var/log/nginx:ro
+      - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
     depends_on: [openresty-east-1]
     restart: unless-stopped
 
   filebeat-east-2:
     profiles: [demos]
-    image: openresty-plus-filebeat:source
+    container_name: orp-filebeat-east-2
+    image: orp-filebeat:source
     build: ./deploy/filebeat
     network_mode: host
     environment:
       FILEBEAT_NODE_ID: ${FILEBEAT_EAST_2_NODE_ID:-}
       FILEBEAT_NODE_NAME: openresty-east-2
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
-      FILEBEAT_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC:?请在 .env 中填写 OPENRESTY_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC:?请在 .env 中填写 ORP_KAFKA_TOPIC}
     volumes:
       - ./runtime/openresty-east-2/log:/var/log/nginx:ro
+      - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
     depends_on: [openresty-east-2]
     restart: unless-stopped
 
   filebeat-east-3:
     profiles: [demos]
-    image: openresty-plus-filebeat:source
+    container_name: orp-filebeat-east-3
+    image: orp-filebeat:source
     build: ./deploy/filebeat
     network_mode: host
     environment:
       FILEBEAT_NODE_ID: ${FILEBEAT_EAST_3_NODE_ID:-}
       FILEBEAT_NODE_NAME: openresty-east-3
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
-      FILEBEAT_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC:?请在 .env 中填写 OPENRESTY_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC:?请在 .env 中填写 ORP_KAFKA_TOPIC}
     volumes:
       - ./runtime/openresty-east-3/log:/var/log/nginx:ro
+      - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
     depends_on: [openresty-east-3]
     restart: unless-stopped
 
   demo-traffic-generator:
     profiles: [traffic]
-    image: openresty-plus-demo-traffic:source
+    container_name: orp-demo-traffic-generator
+    image: orp-demo-traffic:source
     build: ./deploy/traffic-generator
     network_mode: host
     depends_on: [openresty-east-1, openresty-east-2, openresty-east-3]
     environment:
       TRAFFIC_REQUEST_INTERVAL_SECONDS: ${TRAFFIC_REQUEST_INTERVAL_SECONDS:-0.5}
       TRAFFIC_REQUEST_TIMEOUT_SECONDS: ${TRAFFIC_REQUEST_TIMEOUT_SECONDS:-3}
+      TRAFFIC_MANIFEST: /runtime/manifest.json
+    volumes:
+      - ./runtime/traffic-generator:/runtime:ro
     restart: unless-stopped

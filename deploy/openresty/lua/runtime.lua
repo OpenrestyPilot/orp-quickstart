@@ -1,4 +1,4 @@
--- Runtime configuration client for OpenResty Plus.
+-- Runtime configuration client for ORP.
 -- The last verified snapshot is held in lua_shared_dict, so a temporary
 -- control-plane outage never changes request handling.
 local cjson = require "cjson"
@@ -185,7 +185,7 @@ local function request_matches_location(location)
 end
 
 local function reject(reason)
-  ngx.header["X-OpenResty-Plus-Policy"] = reason
+  ngx.header["X-ORP-Policy"] = reason
   return ngx.exit(ngx.HTTP_FORBIDDEN)
 end
 

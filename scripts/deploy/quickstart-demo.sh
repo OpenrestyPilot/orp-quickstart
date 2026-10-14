@@ -5,12 +5,12 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "$root/scripts/lib/dependencies.sh"
 quickstart_load_env "$root/.env"
 
-backend_dir=${ORP_BACKEND_DIR:-"$root/openresty-plus/orp-backend"}
-[[ -d "$backend_dir" ]] || backend_dir="$root/../openresty-plus/openresty-plus/orp-backend"
+backend_dir=${ORP_BACKEND_DIR:-"$root/openresty-pilot/orp-backend"}
+[[ -d "$backend_dir" ]] || backend_dir="$root/../openresty-pilot/orp-backend"
 if [[ -d "$backend_dir" ]]; then backend_dir=$(cd "$backend_dir" && pwd); fi
 base_url=${QUICKSTART_CONTROL_PLANE_URL:-http://127.0.0.1:8081}
-admin_username=${OPENRESTY_ADMIN_USERNAME:-${ADMIN_USERNAME:-admin}}
-admin_password=${OPENRESTY_ADMIN_PASSWORD:-${ADMIN_PASSWORD:-}}
+admin_username=${ORP_ADMIN_USERNAME:-admin}
+admin_password=${ORP_ADMIN_PASSWORD:-}
 center_code=${QUICKSTART_DEMO_CENTER_CODE:-quickstart-local}
 center_name=${QUICKSTART_DEMO_CENTER_NAME:-Quickstart 本地演示中心}
 
@@ -20,17 +20,18 @@ export QUICKSTART_ADMIN_USERNAME="$admin_username"
 export QUICKSTART_ADMIN_PASSWORD="$admin_password"
 export QUICKSTART_NODE_AGENT_DIR="$root/secrets/node-agent"
 
-python3 - "$base_url" "$center_code" "$center_name" <<'PY'
+python3 - "$base_url" "$center_code" "$center_name" "$root/.env" <<'PY'
 import json
 import hashlib
 import os
+from pathlib import Path
 import ssl
 import sys
 import time
 import urllib.error
 import urllib.request
 
-base, center_code, center_name = sys.argv[1:]
+base, center_code, center_name, env_path = sys.argv[1:]
 username = os.environ["QUICKSTART_ADMIN_USERNAME"]
 password = os.environ["QUICKSTART_ADMIN_PASSWORD"]
 
@@ -46,6 +47,20 @@ def request(path, token=None, data=None, method=None):
     if result.get("code") not in (None, 0):
         raise RuntimeError(result.get("message", "接口请求失败"))
     return result.get("data")
+
+def update_env(values):
+    path = Path(env_path)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    pending = dict(values)
+    result = []
+    for line in lines:
+        key = line.split("=", 1)[0].strip() if "=" in line else ""
+        if key in pending:
+            result.append(f"{key}={pending.pop(key)}")
+        else:
+            result.append(line)
+    result.extend(f"{key}={value}" for key, value in pending.items())
+    path.write_text("\n".join(result) + "\n", encoding="utf-8")
 
 last_error = None
 for _ in range(60):
@@ -102,6 +117,7 @@ for name, service_port, control_port in (
 # to choose Agent identity fields.
 nodes = request("/api/orp/nodes?page=1&pageSize=200", token)["items"]
 agent_root = os.environ.get("QUICKSTART_NODE_AGENT_DIR", "")
+filebeat_node_ids = {}
 for name in ("openresty-east-1", "openresty-east-2", "openresty-east-3"):
     node = next((item for item in nodes if item.get("name") == name), None)
     if node is None:
@@ -113,19 +129,34 @@ for name in ("openresty-east-1", "openresty-east-2", "openresty-east-3"):
     request(f"/api/orp/nodes/{node['id']}/agent/certificate", token,
             {"nodeId": name, "certificateFingerprint": fingerprint}, method="PUT")
     print(f"已登记节点 Agent mTLS 身份：{name}")
+    node_id = node.get("id")
+    filebeat_node_ids[name] = str(node_id) if str(node_id or "").isdigit() else ""
+
+update_env({
+    "QUICKSTART_RUNTIME_CENTER_ID": center_legacy_id,
+    "FILEBEAT_EAST_1_NODE_ID": filebeat_node_ids["openresty-east-1"],
+    "FILEBEAT_EAST_2_NODE_ID": filebeat_node_ids["openresty-east-2"],
+    "FILEBEAT_EAST_3_NODE_ID": filebeat_node_ids["openresty-east-3"],
+})
+print("已同步演示中心运行时标识和 Filebeat 节点映射到 .env")
 PY
 
 if [[ "${QUICKSTART_SEED_ALERTS:-true}" == true && -d "$backend_dir" ]]; then
   [[ -x "$(command -v go || true)" ]] || quickstart_fail '灌入告警演示数据需要 Go；请安装 Go，或设置 QUICKSTART_SEED_ALERTS=false 跳过数据准备。'
   printf '准备告警演示数据……\n'
-  OPENRESTY_ENV_FILE="$root/.env" OPENRESTY_ADMIN_USERNAME="$admin_username" \
-    OPENRESTY_ADMIN_PASSWORD="$admin_password" OPENRESTY_DATA_KEY="${OPENRESTY_DATA_KEY:-${DATA_KEY:-}}" \
-    OPENRESTY_DB_URL="${OPENRESTY_DB_URL:-}" OPENRESTY_DB_USERNAME="${OPENRESTY_DB_USERNAME:-}" \
-    OPENRESTY_DB_PASSWORD="${OPENRESTY_DB_PASSWORD:-}" OPENRESTY_REDIS_ADDR="${OPENRESTY_REDIS_ADDR:-}" \
-    OPENRESTY_REDIS_PASSWORD="${OPENRESTY_REDIS_PASSWORD:-}" OPENRESTY_REDIS_DB="${OPENRESTY_REDIS_DB:-}" \
-    OPENRESTY_KAFKA_BOOTSTRAP_SERVERS="${OPENRESTY_KAFKA_BOOTSTRAP_SERVERS:-}" \
-    OPENRESTY_KAFKA_TOPIC="${OPENRESTY_KAFKA_TOPIC:-}" \
+  ORP_ENV_FILE="$root/.env" ORP_ADMIN_USERNAME="$admin_username" \
+    ORP_ADMIN_PASSWORD="$admin_password" ORP_DATA_KEY="${ORP_DATA_KEY:-}" \
+    ORP_DB_URL="${ORP_DB_URL:-}" ORP_DB_USERNAME="${ORP_DB_USERNAME:-}" \
+    ORP_DB_PASSWORD="${ORP_DB_PASSWORD:-}" ORP_REDIS_ADDR="${ORP_REDIS_ADDR:-}" \
+    ORP_REDIS_PASSWORD="${ORP_REDIS_PASSWORD:-}" ORP_REDIS_DB="${ORP_REDIS_DB:-}" \
+    ORP_KAFKA_BOOTSTRAP_SERVERS="${ORP_KAFKA_BOOTSTRAP_SERVERS:-}" \
+    ORP_KAFKA_TOPIC="${ORP_KAFKA_TOPIC:-}" \
     "$backend_dir/scripts/seed-alert-demo.sh"
 elif [[ "${QUICKSTART_SEED_ALERTS:-true}" == true ]]; then
   quickstart_fail '未找到本地 Go 后端源码，无法自动灌入告警演示数据；请设置 ORP_BACKEND_DIR 指向后端源码。'
 fi
+
+printf '准备平台功能演示数据和请求路由清单……\n'
+QUICKSTART_CONTROL_PLANE_URL="$base_url" QUICKSTART_DEMO_CENTER_CODE="$center_code" \
+  QUICKSTART_ADMIN_USERNAME="$admin_username" QUICKSTART_ADMIN_PASSWORD="$admin_password" \
+  python3 "$root/scripts/deploy/seed-platform-demo.py"

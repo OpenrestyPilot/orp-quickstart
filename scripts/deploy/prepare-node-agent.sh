@@ -17,7 +17,7 @@ if [[ ! -d "$agent_source/cmd/orp-node-agent" ]]; then
   if [[ ! -d "$downloaded_source/.git" ]]; then
     rm -rf "$downloaded_source"
     git clone --depth 1 --branch "${ORP_NODE_AGENT_REF:-main}" \
-      https://github.com/OpenrestyPlus/orp-node-agent.git "$downloaded_source"
+      https://github.com/ORP/orp-node-agent.git "$downloaded_source"
   fi
   agent_source="$downloaded_source"
 fi
@@ -92,22 +92,22 @@ awk -v cert="$pki/server.crt" \
     -v key_container="/run/orp-node-agent/server.key" \
     -v ca_container="/run/orp-node-agent/ca.crt" '
   BEGIN { seen_addr=seen_cert=seen_key=seen_ca=0 }
-  /^OPENRESTY_AGENT_HTTPS_ADDR=/ { print "OPENRESTY_AGENT_HTTPS_ADDR=127.0.0.1:18443"; seen_addr=1; next }
-  /^OPENRESTY_AGENT_TLS_CERT_FILE=/ { print "OPENRESTY_AGENT_TLS_CERT_FILE=" cert; seen_cert=1; next }
-  /^OPENRESTY_AGENT_TLS_KEY_FILE=/ { print "OPENRESTY_AGENT_TLS_KEY_FILE=" key; seen_key=1; next }
-  /^OPENRESTY_AGENT_CLIENT_CA_FILE=/ { print "OPENRESTY_AGENT_CLIENT_CA_FILE=" ca; seen_ca=1; next }
-  /^OPENRESTY_AGENT_TLS_CERT_FILE_CONTAINER=/ { print "OPENRESTY_AGENT_TLS_CERT_FILE_CONTAINER=" cert_container; seen_cert_container=1; next }
-  /^OPENRESTY_AGENT_TLS_KEY_FILE_CONTAINER=/ { print "OPENRESTY_AGENT_TLS_KEY_FILE_CONTAINER=" key_container; seen_key_container=1; next }
-  /^OPENRESTY_AGENT_CLIENT_CA_FILE_CONTAINER=/ { print "OPENRESTY_AGENT_CLIENT_CA_FILE_CONTAINER=" ca_container; seen_ca_container=1; next }
+  /^ORP_AGENT_HTTPS_ADDR=/ { print "ORP_AGENT_HTTPS_ADDR=127.0.0.1:18443"; seen_addr=1; next }
+  /^ORP_AGENT_TLS_CERT_FILE=/ { print "ORP_AGENT_TLS_CERT_FILE=" cert; seen_cert=1; next }
+  /^ORP_AGENT_TLS_KEY_FILE=/ { print "ORP_AGENT_TLS_KEY_FILE=" key; seen_key=1; next }
+  /^ORP_AGENT_CLIENT_CA_FILE=/ { print "ORP_AGENT_CLIENT_CA_FILE=" ca; seen_ca=1; next }
+  /^ORP_AGENT_TLS_CERT_FILE_CONTAINER=/ { print "ORP_AGENT_TLS_CERT_FILE_CONTAINER=" cert_container; seen_cert_container=1; next }
+  /^ORP_AGENT_TLS_KEY_FILE_CONTAINER=/ { print "ORP_AGENT_TLS_KEY_FILE_CONTAINER=" key_container; seen_key_container=1; next }
+  /^ORP_AGENT_CLIENT_CA_FILE_CONTAINER=/ { print "ORP_AGENT_CLIENT_CA_FILE_CONTAINER=" ca_container; seen_ca_container=1; next }
   { print }
   END {
-    if (!seen_addr) print "OPENRESTY_AGENT_HTTPS_ADDR=127.0.0.1:18443"
-    if (!seen_cert) print "OPENRESTY_AGENT_TLS_CERT_FILE=" cert
-    if (!seen_key) print "OPENRESTY_AGENT_TLS_KEY_FILE=" key
-    if (!seen_ca) print "OPENRESTY_AGENT_CLIENT_CA_FILE=" ca
-    if (!seen_cert_container) print "OPENRESTY_AGENT_TLS_CERT_FILE_CONTAINER=" cert_container
-    if (!seen_key_container) print "OPENRESTY_AGENT_TLS_KEY_FILE_CONTAINER=" key_container
-    if (!seen_ca_container) print "OPENRESTY_AGENT_CLIENT_CA_FILE_CONTAINER=" ca_container
+    if (!seen_addr) print "ORP_AGENT_HTTPS_ADDR=127.0.0.1:18443"
+    if (!seen_cert) print "ORP_AGENT_TLS_CERT_FILE=" cert
+    if (!seen_key) print "ORP_AGENT_TLS_KEY_FILE=" key
+    if (!seen_ca) print "ORP_AGENT_CLIENT_CA_FILE=" ca
+    if (!seen_cert_container) print "ORP_AGENT_TLS_CERT_FILE_CONTAINER=" cert_container
+    if (!seen_key_container) print "ORP_AGENT_TLS_KEY_FILE_CONTAINER=" key_container
+    if (!seen_ca_container) print "ORP_AGENT_CLIENT_CA_FILE_CONTAINER=" ca_container
   }
 ' "$env_file" > "$tmp"
 cat "$tmp" > "$env_file"

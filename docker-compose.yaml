@@ -1,28 +1,31 @@
-name: openresty-plus
+name: orp
 
 services:
-  openresty-plus:
-    image: ${OPENRESTY_PLUS_IMAGE:?请在 .env 中填写 OPENRESTY_PLUS_IMAGE}:${IMAGE_TAG:-latest}
+  orp:
+    container_name: orp-control-plane
+    image: ${ORP_IMAGE:?请在 .env 中填写 ORP_IMAGE}:${IMAGE_TAG:-latest}
     command: ["run"]
     network_mode: host
     environment:
-      OPENRESTY_HTTP_ADDR: ${OPENRESTY_HTTP_ADDR:-:8081}
-      OPENRESTY_DB_URL: ${OPENRESTY_DB_URL:?请在 .env 中填写 OPENRESTY_DB_URL}
-      OPENRESTY_DB_USERNAME: ${OPENRESTY_DB_USERNAME:?请在 .env 中填写 OPENRESTY_DB_USERNAME}
-      OPENRESTY_DB_PASSWORD: ${OPENRESTY_DB_PASSWORD:?请在 .env 中填写 OPENRESTY_DB_PASSWORD}
-      OPENRESTY_ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      OPENRESTY_ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请在 .env 中填写 ADMIN_PASSWORD}
-      OPENRESTY_DATA_KEY: ${DATA_KEY:?请在 .env 中填写 DATA_KEY}
-      OPENRESTY_REDIS_ADDR: ${OPENRESTY_REDIS_ADDR:?请在 .env 中填写 OPENRESTY_REDIS_ADDR}
-      OPENRESTY_REDIS_PASSWORD: ${OPENRESTY_REDIS_PASSWORD:-}
-      OPENRESTY_REDIS_DB: ${OPENRESTY_REDIS_DB:-0}
-      OPENRESTY_KAFKA_BOOTSTRAP_SERVERS: ${OPENRESTY_KAFKA_BOOTSTRAP_SERVERS:?请在 .env 中填写 OPENRESTY_KAFKA_BOOTSTRAP_SERVERS}
-      OPENRESTY_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC:?请在 .env 中填写 OPENRESTY_KAFKA_TOPIC}
-      OPENRESTY_KAFKA_CONSUMER_GROUP: ${OPENRESTY_KAFKA_CONSUMER_GROUP:-openresty-plus-control-plane-v1}
-      OPENRESTY_AGENT_HTTPS_ADDR: ${OPENRESTY_AGENT_HTTPS_ADDR:-}
-      OPENRESTY_AGENT_TLS_CERT_FILE: ${OPENRESTY_AGENT_TLS_CERT_FILE_CONTAINER:-}
-      OPENRESTY_AGENT_TLS_KEY_FILE: ${OPENRESTY_AGENT_TLS_KEY_FILE_CONTAINER:-}
-      OPENRESTY_AGENT_CLIENT_CA_FILE: ${OPENRESTY_AGENT_CLIENT_CA_FILE_CONTAINER:-}
+      ORP_HTTP_ADDR: ${ORP_HTTP_ADDR:-:8081}
+      ORP_DB_URL: ${ORP_DB_URL:?请在 .env 中填写 ORP_DB_URL}
+      ORP_DB_USERNAME: ${ORP_DB_USERNAME:?请在 .env 中填写 ORP_DB_USERNAME}
+      ORP_DB_PASSWORD: ${ORP_DB_PASSWORD:?请在 .env 中填写 ORP_DB_PASSWORD}
+      ORP_ADMIN_USERNAME: ${ORP_ADMIN_USERNAME:-admin}
+      ORP_ADMIN_PASSWORD: ${ORP_ADMIN_PASSWORD:?请在 .env 中填写 ORP_ADMIN_PASSWORD}
+      ORP_CAPTCHA_ENABLED: ${ORP_CAPTCHA_ENABLED:-false}
+      ORP_DATA_KEY: ${ORP_DATA_KEY:?请在 .env 中填写 ORP_DATA_KEY}
+      ORP_REDIS_ADDR: ${ORP_REDIS_ADDR:?请在 .env 中填写 ORP_REDIS_ADDR}
+      ORP_REDIS_PASSWORD: ${ORP_REDIS_PASSWORD:-}
+      ORP_REDIS_DB: ${ORP_REDIS_DB:-0}
+      ORP_KAFKA_BOOTSTRAP_SERVERS: ${ORP_KAFKA_BOOTSTRAP_SERVERS:?请在 .env 中填写 ORP_KAFKA_BOOTSTRAP_SERVERS}
+      ORP_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC:?请在 .env 中填写 ORP_KAFKA_TOPIC}
+      ORP_KAFKA_CONSUMER_GROUP: ${ORP_KAFKA_CONSUMER_GROUP:-orp-control-plane-v1}
+      ORP_AGENT_HTTPS_ADDR: ${ORP_AGENT_HTTPS_ADDR:-}
+      ORP_AGENT_PUBLIC_URL: ${ORP_AGENT_PUBLIC_URL:-}
+      ORP_AGENT_TLS_CERT_FILE: ${ORP_AGENT_TLS_CERT_FILE_CONTAINER:-}
+      ORP_AGENT_TLS_KEY_FILE: ${ORP_AGENT_TLS_KEY_FILE_CONTAINER:-}
+      ORP_AGENT_CLIENT_CA_FILE: ${ORP_AGENT_CLIENT_CA_FILE_CONTAINER:-}
     volumes:
       - ./runtime:/workspace/runtime
       - ./secrets/node-agent/pki/server.crt:/run/orp-node-agent/server.crt:ro
@@ -33,12 +36,13 @@ services:
 
   openresty-east-1:
     profiles: [demos]
-    container_name: openresty-plus-openresty-east-1
+    container_name: orp-openresty-east-1
     image: ${RUNTIME_IMAGE:?请在 .env 中填写 RUNTIME_IMAGE}:${IMAGE_TAG:-latest}
     network_mode: host
     hostname: openresty-east-1
     environment:
       RUNTIME_CONTROL_PLANE_URL: http://127.0.0.1:8081
+      RUNTIME_CENTER_ID: ${QUICKSTART_RUNTIME_CENTER_ID:-}
       RUNTIME_HTTP_PORT: 18080
       CONTROL_API_BRIDGE_PORT: 18081
       NODE_REGISTRATION_ENABLED: "false"
@@ -54,11 +58,13 @@ services:
 
   openresty-east-2:
     profiles: [demos]
-    container_name: openresty-plus-openresty-east-2
+    container_name: orp-openresty-east-2
     image: ${RUNTIME_IMAGE:?请在 .env 中填写 RUNTIME_IMAGE}:${IMAGE_TAG:-latest}
     network_mode: host
     hostname: openresty-east-2
     environment:
+      RUNTIME_CONTROL_PLANE_URL: http://127.0.0.1:8081
+      RUNTIME_CENTER_ID: ${QUICKSTART_RUNTIME_CENTER_ID:-}
       RUNTIME_HTTP_PORT: 18180
       CONTROL_API_BRIDGE_PORT: 18181
       NODE_REGISTRATION_ENABLED: "false"
@@ -74,11 +80,13 @@ services:
 
   openresty-east-3:
     profiles: [demos]
-    container_name: openresty-plus-openresty-east-3
+    container_name: orp-openresty-east-3
     image: ${RUNTIME_IMAGE:?请在 .env 中填写 RUNTIME_IMAGE}:${IMAGE_TAG:-latest}
     network_mode: host
     hostname: openresty-east-3
     environment:
+      RUNTIME_CONTROL_PLANE_URL: http://127.0.0.1:8081
+      RUNTIME_CENTER_ID: ${QUICKSTART_RUNTIME_CENTER_ID:-}
       RUNTIME_HTTP_PORT: 18280
       CONTROL_API_BRIDGE_PORT: 18281
       NODE_REGISTRATION_ENABLED: "false"
@@ -94,60 +102,71 @@ services:
 
   filebeat-east-1:
     profiles: [demos]
+    container_name: orp-filebeat-east-1
     image: ${FILEBEAT_IMAGE:?请在 .env 中填写 FILEBEAT_IMAGE}:${IMAGE_TAG:-latest}
     network_mode: host
     environment:
       FILEBEAT_NODE_ID: ${FILEBEAT_EAST_1_NODE_ID:-}
       FILEBEAT_NODE_NAME: openresty-east-1
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
-      FILEBEAT_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC}
     volumes:
       - ./runtime/openresty-east-1/log:/var/log/nginx:ro
+      - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
     depends_on: [openresty-east-1]
     restart: unless-stopped
 
   filebeat-east-2:
     profiles: [demos]
+    container_name: orp-filebeat-east-2
     image: ${FILEBEAT_IMAGE:?请在 .env 中填写 FILEBEAT_IMAGE}:${IMAGE_TAG:-latest}
     network_mode: host
     environment:
       FILEBEAT_NODE_ID: ${FILEBEAT_EAST_2_NODE_ID:-}
       FILEBEAT_NODE_NAME: openresty-east-2
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
-      FILEBEAT_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC}
     volumes:
       - ./runtime/openresty-east-2/log:/var/log/nginx:ro
+      - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
     depends_on: [openresty-east-2]
     restart: unless-stopped
 
   filebeat-east-3:
     profiles: [demos]
+    container_name: orp-filebeat-east-3
     image: ${FILEBEAT_IMAGE:?请在 .env 中填写 FILEBEAT_IMAGE}:${IMAGE_TAG:-latest}
     network_mode: host
     environment:
       FILEBEAT_NODE_ID: ${FILEBEAT_EAST_3_NODE_ID:-}
       FILEBEAT_NODE_NAME: openresty-east-3
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
-      FILEBEAT_KAFKA_TOPIC: ${OPENRESTY_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC}
     volumes:
       - ./runtime/openresty-east-3/log:/var/log/nginx:ro
+      - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
     depends_on: [openresty-east-3]
     restart: unless-stopped
 
   demo-traffic-generator:
     profiles: [traffic]
-    image: openresty-plus-demo-traffic:local
+    container_name: orp-demo-traffic-generator
+    image: orp-demo-traffic:local
     build: ./deploy/traffic-generator
     network_mode: host
     depends_on: [openresty-east-1, openresty-east-2, openresty-east-3]
     environment:
       TRAFFIC_REQUEST_INTERVAL_SECONDS: ${TRAFFIC_REQUEST_INTERVAL_SECONDS:-0.5}
       TRAFFIC_REQUEST_TIMEOUT_SECONDS: ${TRAFFIC_REQUEST_TIMEOUT_SECONDS:-3}
+      TRAFFIC_MANIFEST: /runtime/manifest.json
+    volumes:
+      - ./runtime/traffic-generator:/runtime:ro
     restart: unless-stopped
 
   importer:
     image: ${IMPORTER_IMAGE:?请在 .env 中填写 IMPORTER_IMAGE}:${IMAGE_TAG:-latest}
     profiles: [importer]
+    container_name: orp-nginx-importer
     network_mode: host
     environment:
       NGINX_IMPORTER_ADDR: :8090

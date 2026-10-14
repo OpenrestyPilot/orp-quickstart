@@ -39,15 +39,15 @@ def main():
     parser.add_argument("--center-id", type=int, help="目标 Center 的数字 ID；只有一个 Center 时可省略")
     args = parser.parse_args()
     for name, _, _ in NODES:
-        container = "openresty-plus-" + name
+        container = "orp-" + name
         result = subprocess.run(
             ["docker", "inspect", "--format", '{{.State.Status}} {{index .Config.Labels "com.docker.compose.project"}} {{index .Config.Labels "com.docker.compose.service"}}', container],
             capture_output=True, text=True, check=False,
         )
-        if result.returncode or result.stdout.strip() != f"running openresty-plus {name}":
+        if result.returncode or result.stdout.strip() != f"running orp {name}":
             raise RuntimeError(f"容器 {container} 未运行或 Compose 身份不符")
 
-    password = os.environ.get("OPENRESTY_ADMIN_PASSWORD")
+    password = os.environ.get("ORP_ADMIN_PASSWORD")
     password_file = WORKSPACE_ROOT / "runtime/dev/admin-password"
     if not password and password_file.exists():
         password = password_file.read_text().strip()
@@ -55,14 +55,14 @@ def main():
         if password or not env_file.exists():
             continue
         for line in env_file.read_text().splitlines():
-            if line.startswith("OPENRESTY_ADMIN_PASSWORD="):
+            if line.startswith("ORP_ADMIN_PASSWORD="):
                 password = line.split("=", 1)[1].strip().strip("\"'")
                 break
     if not password:
-        raise RuntimeError("找不到本地管理员密码；请设置 OPENRESTY_ADMIN_PASSWORD")
-    login = {"username": os.environ.get("OPENRESTY_ADMIN_USERNAME", "admin"), "password": password}
-    if os.environ.get("OPENRESTY_ADMIN_OTP_CODE"):
-        login["otpCode"] = os.environ["OPENRESTY_ADMIN_OTP_CODE"]
+        raise RuntimeError("找不到本地管理员密码；请设置 ORP_ADMIN_PASSWORD")
+    login = {"username": os.environ.get("ORP_ADMIN_USERNAME", "admin"), "password": password}
+    if os.environ.get("ORP_ADMIN_OTP_CODE"):
+        login["otpCode"] = os.environ["ORP_ADMIN_OTP_CODE"]
     token = request("/auth/login", data=login)["accessToken"]
     centers = request("/orp/centers?page=1&pageSize=200", token)["items"]
     if args.center_id is None:

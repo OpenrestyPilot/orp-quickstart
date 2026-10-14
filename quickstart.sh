@@ -16,22 +16,21 @@ fi
 
 quickstart_load_env "$env_file"
 
-# Accept both the binary/source variable names and the Compose names in .env.
-# The control-plane process itself consumes the OPENRESTY_* names.
-OPENRESTY_ADMIN_USERNAME=${OPENRESTY_ADMIN_USERNAME:-${ADMIN_USERNAME:-}}
-OPENRESTY_ADMIN_PASSWORD=${OPENRESTY_ADMIN_PASSWORD:-${ADMIN_PASSWORD:-}}
-export OPENRESTY_ADMIN_USERNAME OPENRESTY_ADMIN_PASSWORD
+# Binary and Compose startup use the same ORP-prefixed settings.
+ORP_ADMIN_USERNAME=${ORP_ADMIN_USERNAME:-}
+ORP_ADMIN_PASSWORD=${ORP_ADMIN_PASSWORD:-}
+export ORP_ADMIN_USERNAME ORP_ADMIN_PASSWORD
 
-binary_path="${OPENRESTY_PLUS_BINARY_PATH:-bin/openresty-plus}"
+binary_path="${ORP_BINARY_PATH:-bin/orp}"
 [[ "$binary_path" = /* ]] || binary_path="$root/$binary_path"
 
 action=${1:-start}
 if [[ $# -gt 0 ]]; then shift; fi
 
 check_start_config() {
-  [[ -n "${OPENRESTY_ADMIN_USERNAME:-}" ]] || fail '.env 未配置 OPENRESTY_ADMIN_USERNAME。'
-  [[ -n "${OPENRESTY_ADMIN_PASSWORD:-}" ]] || fail '.env 未配置 OPENRESTY_ADMIN_PASSWORD。'
-  [[ "${OPENRESTY_DATA_KEY:-}" =~ ^[[:xdigit:]]{64}$ ]] || fail 'OPENRESTY_DATA_KEY 必须是 64 位十六进制字符串。'
+  [[ -n "${ORP_ADMIN_USERNAME:-}" ]] || fail '.env 未配置 ORP_ADMIN_USERNAME。'
+  [[ -n "${ORP_ADMIN_PASSWORD:-}" ]] || fail '.env 未配置 ORP_ADMIN_PASSWORD。'
+  [[ "${ORP_DATA_KEY:-}" =~ ^[[:xdigit:]]{64}$ ]] || fail 'ORP_DATA_KEY 必须是 64 位十六进制字符串。'
   quickstart_check_dependencies
 }
 
@@ -42,7 +41,7 @@ case "$action" in
 esac
 
 if [[ ! -x "$binary_path" ]]; then
-  binary_url=${OPENRESTY_PLUS_BINARY_URL:-}
+  binary_url=${ORP_BINARY_URL:-}
   command -v curl >/dev/null 2>&1 || fail '下载二进制需要 curl。'
   command -v python3 >/dev/null 2>&1 || fail '自动下载最新 Release 需要 python3。'
   mkdir -p "$(dirname "$binary_path")"
@@ -50,25 +49,25 @@ if [[ ! -x "$binary_path" ]]; then
   trap 'rm -rf "$temporary_dir"' EXIT
 
   if [[ -n "$binary_url" ]]; then
-    printf '正在下载 OPENRESTY_PLUS_BINARY_URL 指定的程序……\n'
-    curl --fail --location --silent --show-error --retry 3 "$binary_url" -o "$temporary_dir/openresty-plus" \
-      || fail '二进制下载失败，请检查 OPENRESTY_PLUS_BINARY_URL 和访问权限。'
+    printf '正在下载 ORP_BINARY_URL 指定的程序……\n'
+    curl --fail --location --silent --show-error --retry 3 "$binary_url" -o "$temporary_dir/orp" \
+      || fail '二进制下载失败，请检查 ORP_BINARY_URL 和访问权限。'
   else
     system_name=$(uname -s)
     machine_name=$(uname -m)
     case "$system_name" in
       Linux) release_os=linux ;;
       Darwin) release_os=darwin ;;
-      *) fail "暂不支持自动下载当前操作系统的 Release：$system_name；请设置 OPENRESTY_PLUS_BINARY_URL。" ;;
+      *) fail "暂不支持自动下载当前操作系统的 Release：$system_name；请设置 ORP_BINARY_URL。" ;;
     esac
     case "$machine_name" in
       x86_64|amd64) release_arch=amd64 ;;
       aarch64|arm64) release_arch=arm64 ;;
-      *) fail "暂不支持自动下载当前 CPU 架构的 Release：$machine_name；请设置 OPENRESTY_PLUS_BINARY_URL。" ;;
+      *) fail "暂不支持自动下载当前 CPU 架构的 Release：$machine_name；请设置 ORP_BINARY_URL。" ;;
     esac
 
-    release_api=${OPENRESTY_PLUS_RELEASE_API_URL:-https://api.github.com/repos/OpenrestyPlus/openresty-plus/releases?per_page=10}
-    printf '正在查询 OpenResty Plus 最新 Release（%s-%s）……\n' "$release_os" "$release_arch"
+    release_api=${ORP_RELEASE_API_URL:-https://api.github.com/repos/OpenrestyPilot/openresty-pilot/releases?per_page=10}
+    printf '正在查询 ORP 最新 Release（%s-%s）……\n' "$release_os" "$release_arch"
     if curl --fail --location --silent --show-error --retry 3 \
       -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
       "$release_api" -o "$temporary_dir/releases.json"; then
@@ -84,7 +83,7 @@ if isinstance(releases, dict):
 suffix = f"-{os_name}-{arch}.zip"
 for release in releases:
     assets = release.get("assets", [])
-    package = next((item for item in assets if item["name"].startswith("openresty-plus-") and item["name"].endswith(suffix)), None)
+    package = next((item for item in assets if item["name"].startswith("orp-") and item["name"].endswith(suffix)), None)
     sums = next((item for item in assets if item["name"] == "SHA256SUMS.txt"), None)
     if package and sums:
         print("\t".join((release.get("tag_name", ""), package["name"], package["browser_download_url"], sums["browser_download_url"])))
@@ -94,9 +93,9 @@ else:
 PY
     else
       printf 'GitHub API 暂不可用，改从 Release 页面查找最新版本……\n'
-      release_page=${OPENRESTY_PLUS_RELEASES_URL:-https://github.com/OpenrestyPlus/openresty-plus/releases}
+      release_page=${ORP_RELEASES_URL:-https://github.com/OpenrestyPilot/openresty-pilot/releases}
       curl --fail --location --silent --show-error --retry 3 "$release_page" -o "$temporary_dir/releases.html" \
-        || fail '无法读取 GitHub Release 页面，请检查网络或 OPENRESTY_PLUS_RELEASES_URL。'
+        || fail '无法读取 GitHub Release 页面，请检查网络或 ORP_RELEASES_URL。'
       python3 - "$temporary_dir/releases.html" "$release_os" "$release_arch" > "$temporary_dir/expanded-assets-url" <<'PY'
 import re
 import sys
@@ -123,7 +122,7 @@ asset_page, tag, os_name, arch = sys.argv[1:]
 page = open(asset_page, encoding="utf-8").read()
 hrefs = [html.unescape(value) for value in re.findall(r'<a[^>]+href="([^"]+)"', page)]
 suffix = f"-{os_name}-{arch}.zip"
-package_path = next((value for value in hrefs if value.split("/")[-1].startswith("openresty-plus-") and value.endswith(suffix)), None)
+package_path = next((value for value in hrefs if value.split("/")[-1].startswith("orp-") and value.endswith(suffix)), None)
 sums_path = next((value for value in hrefs if value.endswith("/SHA256SUMS.txt")), None)
 if not package_path or not sums_path:
     raise SystemExit(f"最新 Release {tag} 没有匹配的 {os_name}-{arch} 程序包或校验文件")
@@ -132,12 +131,12 @@ PY
     fi
     IFS=$'\t' read -r release_tag package_name package_url checksums_url < "$temporary_dir/release-meta" \
       || fail '无法解析 GitHub Release 下载信息。'
-    printf '正在下载 OpenResty Plus %s……\n' "$release_tag"
+    printf '正在下载 ORP %s……\n' "$release_tag"
     curl --fail --location --silent --show-error --retry 3 "$package_url" -o "$temporary_dir/package.zip" \
       || fail 'Release 二进制压缩包下载失败。'
     curl --fail --location --silent --show-error --retry 3 "$checksums_url" -o "$temporary_dir/SHA256SUMS.txt" \
       || fail 'Release 校验文件下载失败。'
-    python3 - "$temporary_dir/package.zip" "$temporary_dir/SHA256SUMS.txt" "$package_name" "$temporary_dir/openresty-plus" <<'PY'
+    python3 - "$temporary_dir/package.zip" "$temporary_dir/SHA256SUMS.txt" "$package_name" "$temporary_dir/orp" <<'PY'
 import hashlib
 import pathlib
 import sys
@@ -163,8 +162,8 @@ with zipfile.ZipFile(archive_path) as bundle:
 PY
   fi
 
-  chmod 0755 "$temporary_dir/openresty-plus"
-  mv "$temporary_dir/openresty-plus" "$binary_path"
+  chmod 0755 "$temporary_dir/orp"
+  mv "$temporary_dir/orp" "$binary_path"
   trap - EXIT
   rm -rf "$temporary_dir"
 fi

@@ -5,10 +5,10 @@ set -euo pipefail
 TASK_ID="${1:?task id required}"
 ARTIFACT_ID="${2:?artifact id required}"
 EXPECTED_SHA256="${3:?sha256 required}"
-ARTIFACT_ROOT="/var/lib/openresty-plus/artifacts"
+ARTIFACT_ROOT="/var/lib/orp/artifacts"
 RELEASE_ROOT="/etc/openresty/releases"
 CURRENT_LINK="/etc/openresty/current"
-CONTROL_SOCKET="${OPENRESTY_CONTROL_SOCKET:-/run/openresty/control.sock}"
+CONTROL_SOCKET="${ORP_CONTROL_SOCKET:-/run/openresty/control.sock}"
 
 case "$TASK_ID" in (*[!a-zA-Z0-9._:-]*|'') echo "invalid task id" >&2; exit 2;; esac
 case "$ARTIFACT_ID" in (*[!a-zA-Z0-9._:-]*|'') echo "invalid artifact id" >&2; exit 2;; esac

@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-source_dir="$root/openresty-plus"
+source_dir="$root/openresty-pilot"
 compose=(docker compose --env-file "$root/.env" -f "$root/docker-compose.source.yaml" --project-directory "$root")
 source "$root/scripts/lib/dependencies.sh"
 quickstart_load_env "$root/.env"
@@ -22,17 +22,18 @@ done
 
 # The generator targets the three demo nodes, so enabling it also enables them.
 [[ "$with_traffic" == true ]] && with_demos=true
+[[ "$with_traffic" != true ]] || quickstart_check_demo_backend_ports
 
 if [[ ! -d "$source_dir/.git" ]]; then
   printf '源码仓库不存在，请先运行 ./scripts/start-source.sh。\n' >&2
   exit 1
 fi
 
-[[ -n "${OPENRESTY_ADMIN_USERNAME:-}" ]] || quickstart_fail '.env 未配置 OPENRESTY_ADMIN_USERNAME。'
-[[ -n "${OPENRESTY_ADMIN_PASSWORD:-}" ]] || quickstart_fail '.env 未配置 OPENRESTY_ADMIN_PASSWORD。'
-[[ "${OPENRESTY_DATA_KEY:-}" =~ ^[[:xdigit:]]{64}$ ]] || quickstart_fail 'OPENRESTY_DATA_KEY 必须是 64 位十六进制字符串。'
+[[ -n "${ORP_ADMIN_USERNAME:-}" ]] || quickstart_fail '.env 未配置 ORP_ADMIN_USERNAME。'
+[[ -n "${ORP_ADMIN_PASSWORD:-}" ]] || quickstart_fail '.env 未配置 ORP_ADMIN_PASSWORD。'
+[[ "${ORP_DATA_KEY:-}" =~ ^[[:xdigit:]]{64}$ ]] || quickstart_fail 'ORP_DATA_KEY 必须是 64 位十六进制字符串。'
 quickstart_check_dependencies
-quickstart_configure_filebeat_brokers
+quickstart_configure_filebeat_brokers "$root"
 
 for tool in git go node pnpm docker; do
   command -v "$tool" >/dev/null 2>&1 || { printf '缺少命令：%s\n' "$tool" >&2; exit 1; }
@@ -44,34 +45,50 @@ printf '编译前后端单体程序……\n'
 if [[ "$with_demos" == true ]]; then
   "$root/scripts/deploy/prepare-node-agent.sh"
   quickstart_load_env "$root/.env"
-  export OPENRESTY_AGENT_HTTPS_ADDR=127.0.0.1:18443
-  export OPENRESTY_AGENT_TLS_CERT_FILE="$root/secrets/node-agent/pki/server.crt"
-  export OPENRESTY_AGENT_TLS_KEY_FILE="$root/secrets/node-agent/pki/server.key"
-  export OPENRESTY_AGENT_CLIENT_CA_FILE="$root/secrets/node-agent/pki/ca.crt"
+  export ORP_AGENT_HTTPS_ADDR=127.0.0.1:18443
+  export ORP_AGENT_TLS_CERT_FILE="$root/secrets/node-agent/pki/server.crt"
+  export ORP_AGENT_TLS_KEY_FILE="$root/secrets/node-agent/pki/server.key"
+  export ORP_AGENT_CLIENT_CA_FILE="$root/secrets/node-agent/pki/ca.crt"
   printf '启动管理平台以准备演示中心、节点和数据……\n'
   cd "$root"
-  OPENRESTY_STATE_DIR="$root/runtime/quickstart-bootstrap" "$source_dir/dist/openresty-plus" start
-  cleanup_demo_bootstrap() { OPENRESTY_STATE_DIR="$root/runtime/quickstart-bootstrap" "$source_dir/dist/openresty-plus" stop >/dev/null 2>&1 || true; }
+  ORP_STATE_DIR="$root/runtime/quickstart-bootstrap" "$source_dir/dist/orp" start
+  cleanup_demo_bootstrap() { ORP_STATE_DIR="$root/runtime/quickstart-bootstrap" "$source_dir/dist/orp" stop >/dev/null 2>&1 || true; }
   trap cleanup_demo_bootstrap EXIT INT TERM
   "$root/scripts/deploy/quickstart-demo.sh"
+  quickstart_load_demo_identity "$root/.env"
+  quickstart_sync_demo_bootstrap_configs "$root"
   printf '启动三个 OpenResty 演示节点和 Filebeat……\n'
+  compose_profiles=(--profile demos)
+  compose_services=(openresty-east-1 openresty-east-2 openresty-east-3 filebeat-east-1 filebeat-east-2 filebeat-east-3)
+  compose_refresh=()
+  [[ "$QUICKSTART_DEMO_BOOTSTRAP_UPDATED" != true ]] || compose_refresh+=(--force-recreate)
   if [[ "$with_traffic" == true ]]; then
     printf '启动演示请求生成器……\n'
-    "${compose[@]}" --profile demos --profile traffic up -d --build
+    compose_profiles+=(--profile traffic)
+    compose_services+=(demo-traffic-generator)
+    if [[ "$QUICKSTART_DEMO_BOOTSTRAP_UPDATED" == true ]]; then
+      "${compose[@]}" "${compose_profiles[@]}" up -d --build --force-recreate "${compose_services[@]}"
+    else
+      "${compose[@]}" "${compose_profiles[@]}" up -d --build "${compose_services[@]}"
+    fi
   else
-    "${compose[@]}" --profile demos up -d --build
+    if [[ "$QUICKSTART_DEMO_BOOTSTRAP_UPDATED" == true ]]; then
+      "${compose[@]}" "${compose_profiles[@]}" up -d --build --force-recreate "${compose_services[@]}"
+    else
+      "${compose[@]}" "${compose_profiles[@]}" up -d --build "${compose_services[@]}"
+    fi
     "${compose[@]}" --profile traffic stop demo-traffic-generator >/dev/null 2>&1 || true
   fi
   printf '管理平台将在演示服务启动后以前台模式运行。\n'
   trap - EXIT INT TERM
-  OPENRESTY_STATE_DIR="$root/runtime/quickstart-bootstrap" "$source_dir/dist/openresty-plus" stop
+  ORP_STATE_DIR="$root/runtime/quickstart-bootstrap" "$source_dir/dist/orp" stop
 else
   printf '演示节点和 Filebeat 已关闭。需要时使用 --with-demos 启动。\n'
   "${compose[@]}" --profile traffic stop demo-traffic-generator >/dev/null 2>&1 || true
 fi
 
 printf '管理界面和 API：http://127.0.0.1:8081\n'
-printf '默认管理员：%s；密码见 .env 中的 OPENRESTY_ADMIN_PASSWORD。\n' "${OPENRESTY_ADMIN_USERNAME:-admin}"
+printf '默认管理员：%s；密码见 .env 中的 ORP_ADMIN_PASSWORD。\n' "${ORP_ADMIN_USERNAME:-admin}"
 printf '按 Ctrl+C 停止应用；需要时可用 docker compose --env-file .env -f docker-compose.source.yaml --profile demos down 停止演示服务。\n'
 cd "$root"
-exec "$source_dir/dist/openresty-plus" run
+exec "$source_dir/dist/orp" run

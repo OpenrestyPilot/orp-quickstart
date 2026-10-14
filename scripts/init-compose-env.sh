@@ -15,8 +15,8 @@ admin_password=$(openssl rand -hex 18)
 data_key=$(openssl rand -hex 32)
 
 awk -v admin="$admin_password" -v key="$data_key" '
-  /^ADMIN_PASSWORD=/ { print "ADMIN_PASSWORD=" admin; next }
-  /^DATA_KEY=/ { print "DATA_KEY=" key; next }
+  /^ORP_ADMIN_PASSWORD=/ { print "ORP_ADMIN_PASSWORD=" admin; next }
+  /^ORP_DATA_KEY=/ { print "ORP_DATA_KEY=" key; next }
   { print }
 ' "$template" > "$env_file"
 chmod 600 "$env_file"
