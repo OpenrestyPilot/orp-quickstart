@@ -2,12 +2,20 @@ filebeat.inputs:
   - type: filestream
     id: orp-access
     paths: ["/var/log/nginx/*.access.log"]
+    prospector.scanner.check_interval: 1s
+    backoff.init: 1s
+    backoff.max: 1s
+    close.on_state_change.inactive: 1m
     fields_under_root: true
     fields:
       orp_log_type: access
   - type: filestream
     id: orp-error
     paths: ["/var/log/nginx/*.error.log"]
+    prospector.scanner.check_interval: 1s
+    backoff.init: 1s
+    backoff.max: 1s
+    close.on_state_change.inactive: 1m
     fields_under_root: true
     fields:
       orp_log_type: error
