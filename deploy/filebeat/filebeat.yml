@@ -20,6 +20,12 @@ filebeat.inputs:
     fields:
       orp_log_type: error
 
+# Keep registry checkpoints and queued events on the per-node Docker volume.
+path.data: /usr/share/filebeat/data
+
+queue.disk:
+  max_size: ${FILEBEAT_DISK_QUEUE_MAX_SIZE:1GB}
+
 processors:
   - add_fields:
       target: orp
@@ -31,7 +37,8 @@ processors:
 output.kafka:
   hosts: ${FILEBEAT_KAFKA_HOSTS}
   topic: "${FILEBEAT_KAFKA_TOPIC}"
-  required_acks: 1
+  # Production can set -1 when the topic has a suitable min.insync.replicas.
+  required_acks: ${FILEBEAT_KAFKA_REQUIRED_ACKS:1}
   compression: gzip
   codec.json:
     pretty: false

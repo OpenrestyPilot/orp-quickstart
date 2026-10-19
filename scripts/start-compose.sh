@@ -40,7 +40,7 @@ if [[ "$with_demos" == true ]]; then
   docker build --pull -t "${RUNTIME_IMAGE}:${IMAGE_TAG:-latest}" \
     -f "$root/deploy/openresty/Dockerfile.control-api" "$root/deploy/openresty"
   printf '启动管理平台……\n'
-  "${compose[@]}" up -d orp
+  "${compose[@]}" up -d orp screen
   "$root/scripts/deploy/quickstart-demo.sh"
   quickstart_load_demo_identity "$env_file"
   quickstart_sync_demo_bootstrap_configs "$root"
@@ -68,7 +68,7 @@ if [[ "$with_demos" == true ]]; then
   fi
 else
   printf '启动管理平台（演示节点和 Filebeat 已关闭）……\n'
-  "${compose[@]}" up -d orp
+  "${compose[@]}" up -d orp screen
   "${compose[@]}" --profile traffic stop demo-traffic-generator >/dev/null 2>&1 || true
 fi
 

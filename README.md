@@ -8,7 +8,7 @@
 | 源码启动 | 从 `orp` 拉取源码，在本机编译单体程序 | `./scripts/start-source.sh` |
 | Compose 镜像启动 | 使用 Release/Beta 镜像启动管理平台 | `./scripts/start-compose.sh` |
 
-两种模式都连接用户自行提供的 MySQL、Redis、Kafka，不会替用户启动这些中间件。启动前会检查必填连接配置和对应 TCP 端口。三个 OpenResty 演示节点及 Filebeat 默认关闭，可在 `.env` 设置 `QUICKSTART_START_DEMOS=true` 或启动时添加 `--with-demos` 开启。请求生成器也默认关闭；设置 `QUICKSTART_START_TRAFFIC_GENERATOR=true` 或添加 `--with-traffic` 可启用，它会自动启动三个演示节点，按演示路由清单持续轮询请求，并提供本地 HTTP API 和 TCP 回显上游。演示节点会输出 JSON 访问日志，Filebeat 自动将日志转发至 `ORP_KAFKA_TOPIC`；默认 broker 来自 `ORP_KAFKA_BOOTSTRAP_SERVERS`，也可通过 `FILEBEAT_KAFKA_HOSTS` 指定 JSON 字符串列表。Quickstart 会自动关联演示中心 UUID 和节点 ID。演示容器使用 host network；主机需预留管理平台 8081、演示后端 19000–19002、节点管理/Control API 端口（18080/18081、18180/18181、18280/18281），以及本地演示数据面端口。为避免多个节点在同一主机上监听冲突，发布配置时 HTTP/Stream 监听端口按节点分别增加 20000、30000、40000；当前演示 HTTP/Stream 端口分别为 east-1 的 20080/28080/39090、east-2 的 30080/38080/49090、east-3 的 40080/48080/59090。源码模式额外需要 Go 1.26.1、Node.js 22.18+ 或 24.12+、pnpm 11.16.0 和 Docker。
+两种模式都连接用户自行提供的 MySQL、Redis、Kafka，不会替用户启动这些中间件。启动前会检查必填连接配置和对应 TCP 端口。三个 OpenResty 演示节点及 Filebeat 默认关闭，可在 `.env` 设置 `QUICKSTART_START_DEMOS=true` 或启动时添加 `--with-demos` 开启。请求生成器也默认关闭；设置 `QUICKSTART_START_TRAFFIC_GENERATOR=true` 或添加 `--with-traffic` 可启用，它会自动启动三个演示节点，按演示路由清单持续轮询请求，并提供本地 HTTP API 和 TCP 回显上游。演示节点会输出 JSON 访问日志，Filebeat 自动将日志转发至 `ORP_KAFKA_TOPIC`；默认 broker 来自 `ORP_KAFKA_BOOTSTRAP_SERVERS`，也可通过 `FILEBEAT_KAFKA_HOSTS` 指定 JSON 字符串列表。Filebeat 为每个演示节点使用独立 Docker named volume 保存 registry 和磁盘队列；`FILEBEAT_DISK_QUEUE_MAX_SIZE` 可配置队列上限，`FILEBEAT_KAFKA_REQUIRED_ACKS` 默认 `1` 适用于本地演示，生产环境需结合 Kafka topic 副本与 `min.insync.replicas` 配置。普通 `docker compose down` 会保留状态卷；`docker compose down -v` 会删除它们并丢弃未发送队列。Quickstart 会自动关联演示中心 UUID 和节点 ID。演示容器使用 host network；主机需预留管理平台 8081、演示后端 19000–19002、节点管理/Control API 端口（18080/18081、18180/18181、18280/18281），以及本地演示数据面端口。为避免多个节点在同一主机上监听冲突，发布配置时 HTTP/Stream 监听端口按节点分别增加 20000、30000、40000；当前演示 HTTP/Stream 端口分别为 east-1 的 20080/28080/39090、east-2 的 30080/38080/49090、east-3 的 40080/48080/59090。源码模式额外需要 Go 1.26.1、Node.js 22.18+ 或 24.12+、pnpm 11.16.0 和 Docker。
 
 ## Release 二进制启动
 
@@ -95,9 +95,18 @@ cp .env.binary.example .env
 
 启用演示服务时，quickstart 会等待管理 API 就绪，使用管理员账号幂等创建/复用 `quickstart-local` 演示中心，并登记 `openresty-east-1/2/3`。它还会准备带上海坐标的演示中心、HTTP 监听与路由、多个 Upstream、TCP Stream、DNS 解析器、IP 组、系统配置，以及 HTTP/Stream 全局指令、日志格式和错误页；请求清单写入 `runtime/traffic-generator/manifest.json`。本地 Webhook、飞书待配置通道、TLS 到期证书和提醒规则由告警演示数据脚本准备；通知通道默认停用，不会外发。演示资源会形成待比较/待发布的配置，但启动时不会自动下发到 OpenResty 节点。GeoIP 地理流量需要管理员导入合法的 GeoLite2 City 数据库后才会显示真实位置。Compose 镜像模式需要安装 Go 并有 `openresty-pilot/orp-backend` 源码目录；目录不在默认位置时可设置 `ORP_BACKEND_DIR`。首次启用演示服务的 Compose 流程会先单独启动管理平台，完成登记和数据准备后再启动节点与 Filebeat。
 
-启用演示节点时，quickstart 会同时运行每个节点的 `orp-node-agent`。Agent 使用独立客户端证书通过 mTLS 回连管理平台；CA 与节点私钥存放在 Git 忽略的 `secrets/node-agent/`，管理容器只挂载服务端证书、私钥和客户端 CA。每个 Agent 以低权限账户运行，只允许调用固定的 OpenResty 配置校验与 reload helper。若相邻目录存在 `orp-node-agent` 仓库，启动时优先使用该源码；否则从 GitHub 获取 `main`（可通过 `ORP_NODE_AGENT_REF` 指定分支或标签）。当前 Agent 控制协议支持状态心跳和受控 reload；发布制品传输及批量发布尚未接入此 Agent 协议。
+启用演示节点时，quickstart 会同时运行每个节点的 `orp-node-agent`。Agent 使用独立客户端证书通过 mTLS 回连管理平台；CA 与节点私钥存放在 Git 忽略的 `secrets/node-agent/`，管理容器只挂载服务端证书、私钥和客户端 CA。每个 Agent 以低权限账户运行，只允许调用固定的 OpenResty 配置校验与 reload helper。若相邻目录存在 `orp-node-agent` 仓库，启动时优先使用该源码；否则从 GitHub 获取 `main`（可通过 `ORP_NODE_AGENT_REF` 指定分支或标签）。Agent 控制协议支持状态心跳、受控 reload，以及在固定非 root 发布 profile 下进行候选配置校验和发布；root-master、容器编排和多实例拓扑仍不支持 Agent 候选发布。
 
-打开 http://127.0.0.1:8081 登录。管理员账号和密码分别见 `.env` 中的 `ORP_ADMIN_USERNAME`、`ORP_ADMIN_PASSWORD`。主程序在首次启动时自动初始化数据库表结构。
+打开 http://127.0.0.1:8081 登录；Quickstart 同时启动独立大屏，地址为 http://127.0.0.1:8082/。管理员账号和密码分别见 `.env` 中的 `ORP_ADMIN_USERNAME`、`ORP_ADMIN_PASSWORD`。主程序在首次启动时自动初始化数据库表结构。Quickstart 的控制面与大屏分别监听 8081 和 8082，构建本地控制面镜像时必须把卡片入口指向独立大屏地址：
+
+```sh
+docker build --build-arg VITE_ORP_SCREEN_URL=http://127.0.0.1:8082/ \
+  -t "${ORP_IMAGE:-orp-local}:${IMAGE_TAG:-latest}" \
+  -f ../openresty-pilot/deploy/Dockerfile ../openresty-pilot
+docker compose --env-file .env -f docker-compose.yaml up -d --no-deps --force-recreate orp
+```
+
+若在发布网关后面部署并将同源 `/screen/` 转发至 `orp-screen`，才使用默认 `/screen/` 路径。Quickstart 的控制面没有该同源反向代理，不能把 `/screen/` 当作独立大屏服务入口。
 
 OpenResty 演示节点管理/探针端口为 18080、18180、18280；Control API 端口为 18081、18181、18281。发布到本机三节点时，HTTP/Stream 监听端口分别使用 east-1 的 `20080/28080/39090`、east-2 的 `30080/38080/49090`、east-3 的 `40080/48080/59090`，以隔离同一主机上的监听端口。演示发布会通过 Docker socket 操作本地节点，并使用 `runtime/` 下的共享配置目录。Docker socket 赋予容器管理本机 Docker 的能力，只应在可信的开发或演示主机运行。
 
@@ -131,6 +140,7 @@ docker-compose.yaml            预编译镜像和可选演示服务配置
 docker-compose.source.yaml     源码模式的可选演示服务配置
 deploy/openresty/              OpenResty 演示节点镜像与配置
 deploy/filebeat/               Filebeat 演示镜像与日志采集配置
+deploy/LOG-OPERATIONS.md       日志链路生产运维及故障验收清单
 deploy/traffic-generator/      可选的三节点演示请求生成器
 scripts/start-source.sh        获取源码、生成配置并启动源码模式
 scripts/start-compose.sh       检查外部依赖并启动镜像模式

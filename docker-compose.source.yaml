@@ -87,9 +87,12 @@ services:
       FILEBEAT_NODE_NAME: openresty-east-1
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
       FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC:?请在 .env 中填写 ORP_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_REQUIRED_ACKS: ${FILEBEAT_KAFKA_REQUIRED_ACKS:-1}
+      FILEBEAT_DISK_QUEUE_MAX_SIZE: ${FILEBEAT_DISK_QUEUE_MAX_SIZE:-1GB}
     volumes:
       - ./runtime/openresty-east-1/log:/var/log/nginx:ro
       - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - filebeat-east-1-data:/usr/share/filebeat/data
     depends_on: [openresty-east-1]
     restart: unless-stopped
 
@@ -104,9 +107,12 @@ services:
       FILEBEAT_NODE_NAME: openresty-east-2
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
       FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC:?请在 .env 中填写 ORP_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_REQUIRED_ACKS: ${FILEBEAT_KAFKA_REQUIRED_ACKS:-1}
+      FILEBEAT_DISK_QUEUE_MAX_SIZE: ${FILEBEAT_DISK_QUEUE_MAX_SIZE:-1GB}
     volumes:
       - ./runtime/openresty-east-2/log:/var/log/nginx:ro
       - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - filebeat-east-2-data:/usr/share/filebeat/data
     depends_on: [openresty-east-2]
     restart: unless-stopped
 
@@ -121,9 +127,12 @@ services:
       FILEBEAT_NODE_NAME: openresty-east-3
       FILEBEAT_KAFKA_HOSTS: ${FILEBEAT_KAFKA_HOSTS:?请配置 FILEBEAT_KAFKA_HOSTS}
       FILEBEAT_KAFKA_TOPIC: ${ORP_KAFKA_TOPIC:?请在 .env 中填写 ORP_KAFKA_TOPIC}
+      FILEBEAT_KAFKA_REQUIRED_ACKS: ${FILEBEAT_KAFKA_REQUIRED_ACKS:-1}
+      FILEBEAT_DISK_QUEUE_MAX_SIZE: ${FILEBEAT_DISK_QUEUE_MAX_SIZE:-1GB}
     volumes:
       - ./runtime/openresty-east-3/log:/var/log/nginx:ro
       - ./runtime/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - filebeat-east-3-data:/usr/share/filebeat/data
     depends_on: [openresty-east-3]
     restart: unless-stopped
 
@@ -141,3 +150,8 @@ services:
     volumes:
       - ./runtime/traffic-generator:/runtime:ro
     restart: unless-stopped
+
+volumes:
+  filebeat-east-1-data:
+  filebeat-east-2-data:
+  filebeat-east-3-data:
